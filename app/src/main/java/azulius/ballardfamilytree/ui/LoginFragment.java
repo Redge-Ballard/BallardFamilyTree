@@ -13,14 +13,17 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Array;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 
 import azulius.ballardfamilytree.R;
 import azulius.ballardfamilytree.model.LoginResult;
@@ -106,6 +109,8 @@ public class LoginFragment extends Fragment {
         if (result != null){
             LoadDataTask loadTask = new LoadDataTask();
             loadTask.execute(result);
+            LoadAllDataTask loadAllTask = new LoadAllDataTask();
+            loadAllTask.execute(result);
         }
     }
 
@@ -189,8 +194,7 @@ public class LoginFragment extends Fragment {
                     }
                     String responseBodyData = baos.toString();
                     JSONObject response = new JSONObject(responseBodyData);
-                    Person result = new Person(response.getString("firstName"),response.getString("lastName"),response.getString("gender"),
-                    response.getString("personID"),response.getString("father"),response.getString("mother"));
+                    Person result = getPersonFromJson(response);
                     return result;
                 }
             } catch (Exception e) {
@@ -212,6 +216,96 @@ public class LoginFragment extends Fragment {
             }
             Toast.makeText(getActivity(), outcome, Toast.LENGTH_LONG).show();
         }
+    }
+
+    public class LoadAllDataTask extends AsyncTask<LoginResult, Integer, ArrayList<Person>> {
+
+        protected ArrayList<Person> doInBackground(LoginResult... params) {
+            try {
+                String address = "http://" + serverAddress + ":" + serverPort + "/person/";
+                URL url = new URL(address);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty("Authorization", params[0].getAuthorization());
+                connection.connect();
+                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                    InputStream responseBody = connection.getInputStream();
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[1024];
+                    int length = 0;
+                    while ((length = responseBody.read(buffer)) != -1) {
+                        baos.write(buffer, 0, length);
+                    }
+                    String responseBodyData = baos.toString();
+                    JSONObject response = new JSONObject(responseBodyData);
+                    String dataArray = response.getString("data");
+                    JSONArray responseArray = new JSONArray(dataArray);
+                    ArrayList<Person> peopleList = new ArrayList<>();
+                    for (int i = 0; i < responseArray.length(); i++){
+                        Person person = getPersonFromJson(responseArray.getJSONObject(i));
+                        peopleList.add(person);
+                    }
+                    return peopleList;
+                }
+            } catch (Exception e) {
+                String error = e.getMessage();
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        protected void onPostExecute(ArrayList<Person> result) {
+            String outcome = new String();
+            if (result != null){
+                loginWorked = true;
+                mCallback.onLoginSuccess(loginWorked);
+            }
+            else {
+                outcome = "Load failed.";
+            }
+            Toast.makeText(getActivity(), outcome, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public Person getPersonFromJson(JSONObject obj){
+        String first;
+        String last;
+        String gender;
+        String id;
+        String descendant;
+        String father;
+        String mother;
+        String spouse;
+        try {
+            first = obj.getString("firstName");
+            last = obj.getString("lastName");
+            gender = obj.getString("gender");
+            id = obj.getString("personID");
+            descendant = obj.getString("descendant");
+            if (obj.has("father")) {
+                father = obj.getString("father");
+            }
+            else {
+                father = null;
+            }
+            if (obj.has("mother")) {
+                mother = obj.getString("mother");
+            }
+            else {
+                mother = null;
+            }
+            if (obj.has("spouse")) {
+                spouse = obj.getString("spouse");
+            }
+            else {
+                spouse = null;
+            }
+            Person person = new Person(first, last, gender, id, descendant, father, mother, spouse);
+            return person;
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     @Override
